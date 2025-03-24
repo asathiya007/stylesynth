@@ -18,16 +18,13 @@ class StyleSynth:
         self.device = torch.device(
             'cuda' if torch.cuda.is_available() else 'cpu')
 
-    def train(self, epochs=10, batch_size=64, vis_interval=2,
-              num_imgs_to_generate=3):
+    def train(self, img_size=24, epochs=10, batch_size=64, vis_interval=2):
         # train U-Net to predict noise in an image
         self.diffusion_model = StyleSynth_DiffusionModel(
-            T=150, w=2.0, upper_beta=0.02, device=self.device,
-            logger=self.logger)
+            img_size=img_size, T=150, w=2.0, upper_beta=0.02,
+            device=self.device, logger=self.logger)
         self.diffusion_model.train(
-            epochs=epochs, batch_size=batch_size,
-            vis_interval=vis_interval,
-            num_imgs_to_generate=num_imgs_to_generate)
+            epochs=epochs, batch_size=batch_size, vis_interval=vis_interval)
 
     def generate(self, clothing_types):
         # generate images of new clothing using the diffusion model

@@ -8,12 +8,22 @@ from torchvision import datasets, transforms
 from stylesynth_unet import StyleSynth_UNet
 
 
+# details about the fashion MNIST dataset
+IMG_CHS = 1
+CLOTHING_TYPES = [
+    'Top', 'Trouser', 'Pullover', 'Dress', 'Coat', 'Sandal', 'Shirt',
+    'Sneaker', 'Bag', 'Boot']
+
+
 class StyleSynth_DiffusionModel:
     '''
     The diffusion model used in the StyleSynth system
     '''
-    def __init__(self, T, w, upper_beta, device, logger):
+    def __init__(self, img_size, T, w, upper_beta, device, logger):
         self.logger = logger
+
+        # set image size
+        self.img_size = img_size
 
         # set device
         self.device = device
@@ -26,10 +36,8 @@ class StyleSynth_DiffusionModel:
 
         # set variance schedule (beta) and other variables based on it
         self.upper_beta = upper_beta
-        self.beta = torch.concat([
-            torch.Tensor([0]),
-            torch.linspace(self.upper_beta / self.T, self.upper_beta, self.T)
-        ], dim=-1).to(self.device)
+        self.beta = torch.linspace(
+            0, self.upper_beta, self.T + 1, device=self.device)
         self.alpha = 1 - self.beta
         self.alpha_bar = torch.cumprod(self.alpha, dim=0)
         self.sqrt_alpha_bar = torch.sqrt(self.alpha_bar)
@@ -44,11 +52,6 @@ class StyleSynth_DiffusionModel:
             transforms.Lambda(lambda t: torch.maximum(torch.tensor([0]), t)),
             transforms.ToPILImage()
         ])
-
-        # details of Fashion MNIST dataset
-        self.clothing_type_names = [
-            'Top', 'Trouser', 'Pullover', 'Dress', 'Coat', 'Sandal', 'Shirt',
-            'Sneaker', 'Bag', 'Boot']
 
     def diffusion(self, x_0, t):
         '''
@@ -108,19 +111,19 @@ class StyleSynth_DiffusionModel:
         # get context vectors based on provided classes
         clothing_type_labels = []
         for clothing_type in clothing_types:
-            if clothing_type not in self.clothing_type_names:
+            if clothing_type not in CLOTHING_TYPES:
                 raise Exception(
                     f'Invalid clothing type: {clothing_type}. Expected one '
-                    + f'of: {self.clothing_type_names}')
-            clothing_type_label = self.clothing_type_names.index(clothing_type)
+                    + f'of: {CLOTHING_TYPES}')
+            clothing_type_label = CLOTHING_TYPES.index(clothing_type)
             clothing_type_labels.append(clothing_type_label)
         c = torch.Tensor(clothing_type_labels)
         c = F.one_hot(
-            c.to(torch.int64), num_classes=len(self.clothing_type_names))\
+            c.to(torch.int64), num_classes=len(CLOTHING_TYPES))\
             .float().to(self.device)
 
         # perform reverse diffusion
-        for i in range(0, self.T)[::-1]:
+        for i in range(1, self.T + 1)[::-1]:
             # predict and remove added noise for the current timestep
             t = torch.full((1, ), i, device=self.device).float()
             context_eps_t = self.unet(x_t, t, c)
@@ -137,21 +140,27 @@ class StyleSynth_DiffusionModel:
         return generated_images
 
     @torch.no_grad()
-    def _show_reverse_diffusion(
-            self, unet, x_0, c, num_imgs_to_show):
+    def _show_reverse_diffusion(self, unet, num_imgs_to_show):
         # sampled noise to convert into an image via reverse diffusion
-        x_t = torch.randn_like(x_0, device=self.device)
+        x_t = torch.randn(
+            (len(CLOTHING_TYPES), IMG_CHS, self.img_size, self.img_size),
+            device=self.device)
+
+        # get context vectors from class labels
+        c = torch.Tensor(list(range(len(CLOTHING_TYPES))))
+        c = F.one_hot(
+            c.to(torch.int64), num_classes=len(CLOTHING_TYPES))\
+            .float().to(self.device)
 
         # plot images across timesteps during reverse diffusion
-        num_rows = x_0.shape[0]
+        num_rows = len(CLOTHING_TYPES)
         num_cols = num_imgs_to_show + 1
         _, axes = plt.subplots(
             nrows=num_rows, ncols=num_cols,
             figsize=(num_cols * 2, num_rows * 2))
-        # axes = np.array(axes).reshape(num_cols, num_rows).T
-        interval = self.T // num_imgs_to_show + 1
+        interval = self.T // num_imgs_to_show
         plot_num = 1
-        for i in range(0, self.T)[::-1]:
+        for i in range(1, self.T + 1)[::-1]:
             # predict and remove added noise for the current timestep
             t = torch.full((1, ), i, device=self.device).float()
             context_eps_t = unet(x_t, t, c)
@@ -166,46 +175,48 @@ class StyleSynth_DiffusionModel:
                     axes[j, plot_num - 1].imshow(
                          self.display_image_transforms(x_t[j].detach().cpu()))
                     axes[j, plot_num - 1].axis('off')
+                    axes[j, plot_num - 1].set_title(
+                        f'{CLOTHING_TYPES[j]}, t = {i}')
                 plot_num += 1
-        # plot original images
+        # plot final generated images
         for j in range(num_rows):
             axes[j, plot_num - 1].imshow(
-                 self.display_image_transforms(x_0[j].detach().cpu()))
+                self.display_image_transforms(x_t[j].detach().cpu()))
             axes[j, plot_num - 1].axis('off')
+            axes[j, plot_num - 1].set_title(
+                f'{CLOTHING_TYPES[j]}, t = 0')
         # show plot of generated images and original images
         plt.tight_layout()
         plt.show()
 
-    def train(self, epochs, batch_size, vis_interval, num_imgs_to_generate):
-        # image dimension details
-        IMG_SIZE = 16
-        IMG_CHS = 1
-
-        # transforms for loading data
-        load_transforms = transforms.Compose([
-            transforms.Resize((IMG_SIZE, IMG_SIZE)),
+    def train(self, epochs, batch_size, vis_interval):
+        # load dataset and create data loader
+        self.logger.info('Loading Fashion MNIST dataset...')
+        data_transforms = transforms.Compose([
+            transforms.Resize((self.img_size, self.img_size)),
             transforms.ToTensor(),  # convert images to tensors (range [0, 1])
             transforms.Normalize((0.5,), (0.5,))  # normalize to range [-1, 1]
         ])
         train_dataset = datasets.FashionMNIST(
             root='./data', train=True, download=True,
-            transform=load_transforms)
+            transform=data_transforms)
         test_dataset = datasets.FashionMNIST(
             root='./data', train=False, download=True,
-            transform=load_transforms)
+            transform=data_transforms)
         combined_dataset = ConcatDataset([train_dataset, test_dataset])
         dataloader = DataLoader(
             combined_dataset, batch_size=batch_size, shuffle=True)
+        self.logger.info('Dataset loaded')
 
         # instantiate U-Net model for predicting noise added to an image
         unet = StyleSynth_UNet(
-            img_size=IMG_SIZE,
+            img_size=self.img_size,
             img_chs=IMG_CHS,
             T=self.T,
             down_chs=[80, 128, 160],
             group_size=16,
             t_embed_dim=8,
-            c_embed_dim=len(self.clothing_type_names),
+            c_embed_dim=len(CLOTHING_TYPES),
             conv_hidden_layers=2,
             dense_embed_hidden_layers=3,
             t_embed_hidden_layers=2,
@@ -220,25 +231,22 @@ class StyleSynth_DiffusionModel:
         train_c_drop_prob = 0.05
 
         # train model
+        self.logger.info('Training U-Net for noise prediction...')
         unet.train()
-        display_img = None
-        display_img_c = None
-        display_clothing_types = None
         for epoch in tqdm(range(epochs)):
-            avg_img_loss = 0
-            for step, (imgs, labels) in enumerate(dataloader):
+            for _, (imgs, labels) in enumerate(dataloader):
                 optimizer.zero_grad()
                 imgs = imgs.to(self.device)
                 labels = labels.to(self.device)
 
                 # get model inputs
                 t = torch.randint(
-                    0, self.T, (imgs.shape[0], ), device=self.device).to(
+                    1, self.T + 1, (imgs.shape[0], ), device=self.device).to(
                     self.device).float()
                 x_0 = imgs.to(self.device)
                 c = F.one_hot(
                     labels.to(torch.int64),
-                    num_classes=len(self.clothing_type_names))
+                    num_classes=len(CLOTHING_TYPES))
                 c_mask = torch.bernoulli(
                     torch.ones_like(c).float() - train_c_drop_prob).to(
                         self.device)
@@ -250,6 +258,7 @@ class StyleSynth_DiffusionModel:
 
                 # calculate loss and backpropagate
                 loss = F.mse_loss(eps_t, pred_eps_t)
+                avg_loss = loss.item()
                 loss.backward()
                 # above code (MSE across all elements) is mathematically
                 # equivalent to the below code (MSE across elements in each
@@ -260,35 +269,17 @@ class StyleSynth_DiffusionModel:
                 # avg_loss_per_img = loss_per_img.mean()
                 # avg_loss_per_img.backward()
                 optimizer.step()
-
-                if display_img is None and display_img_c is None and \
-                        display_clothing_types is None:
-                    display_img = x_0[:num_imgs_to_generate].detach().clone()
-                    display_img_c = c[:num_imgs_to_generate].float().detach()\
-                        .clone()
-                    display_clothing_types = list(map(
-                        lambda i: self.clothing_type_names[i],
-                        labels.view(-1).tolist()[:num_imgs_to_generate]))
-
-                # update average loss per image
-                avg_img_loss = (avg_img_loss * step + loss.item())\
-                    / (step + 1)
-                # above code is mathematically equivalent to below code
-                # (batch_size terms cancel out)
-                # total_img_loss = avg_img_loss * step * batch_size\
-                #     + loss.item() * batch_size
-                # avg_img_loss = total_img_loss / (batch_size * (step + 1))
                 del x_t, eps_t, pred_eps_t, loss  # deleting to save memory
 
             # show results
             if epoch == 0 or (epoch + 1) % vis_interval == 0 or \
                     epoch + 1 == epochs:
                 self.logger.info(f'Epoch {epoch + 1} / {epochs}')
-                self.logger.info(f'Average Loss Per Image: {avg_img_loss}')
-                self.logger.info(f'Clothing types: {display_clothing_types}')
-                self._show_reverse_diffusion(
-                    unet, display_img, display_img_c, 10)
-
+                self.logger.info(
+                    'Average loss across batch at final step of epoch: '
+                    + f'{avg_loss}')
+                self._show_reverse_diffusion(unet, min(5, self.T))
         # model set to eval mode since training is done
         unet.eval()
         self.unet = unet
+        self.logger.info('Training complete')

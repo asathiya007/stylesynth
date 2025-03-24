@@ -6,7 +6,7 @@ import torch.nn as nn
 
 class ConvBlock(nn.Module):
     '''
-    Convolution block, for use in StyleSynth U-net
+    Convolution block, for use in StyleSynth U-Net
     '''
     def __init__(self, in_chs, out_chs, group_size, num_hidden_layers=1,
                  pool=True):
@@ -48,7 +48,7 @@ class ConvBlock(nn.Module):
 
 class TransposeConvBlock(nn.Module):
     '''
-    Transpose convolution block, for use in StyleSynth U-net
+    Transpose convolution block, for use in StyleSynth U-Net
     '''
     def __init__(self, in_chs, out_chs, group_size, num_hidden_layers=1):
         super().__init__()
@@ -72,7 +72,7 @@ class TransposeConvBlock(nn.Module):
 
 class SinPosEmbedBlock(nn.Module):
     '''
-    Sinusoidal positional embedding block, for use in StyleSynth U-net
+    Sinusoidal positional embedding block, for use in StyleSynth U-Net
     '''
     def __init__(self, embed_dim):
         super().__init__()
@@ -100,7 +100,7 @@ class SinPosEmbedBlock(nn.Module):
 
 class EmbedBlock(nn.Module):
     '''
-    General embedding block, for use in StyleSynth U-net
+    General embedding block, for use in StyleSynth U-Net
     '''
     def __init__(self, in_dim, embed_dim, num_hidden_layers=1):
         super().__init__()
@@ -125,7 +125,7 @@ class EmbedBlock(nn.Module):
 
 class StyleSynth_UNet(nn.Module):
     '''
-    U-net for predicting noise added to an image at a particular time step.
+    U-Net for predicting noise added to an image at a particular time step.
     Used in the diffusion model
     '''
     def __init__(self, img_size, img_chs, T, down_chs, group_size,
