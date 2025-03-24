@@ -213,15 +213,15 @@ class StyleSynth_DiffusionModel:
             img_size=self.img_size,
             img_chs=IMG_CHS,
             T=self.T,
-            down_chs=[100, 150, 200],
+            down_chs=[125, 175, 225],
             group_size=25,
             t_embed_dim=10,
             c_embed_dim=len(CLOTHING_TYPES),
-            conv_hidden_layers=5,
-            dense_embed_hidden_layers=5,
-            t_embed_hidden_layers=5,
-            c_embed_hidden_layers=5,
-            transp_conv_hidden_layers=5,
+            conv_hidden_layers=6,
+            dense_embed_hidden_layers=6,
+            t_embed_hidden_layers=6,
+            c_embed_hidden_layers=6,
+            transp_conv_hidden_layers=6,
             device=self.device)
 
         # set up optimizer
