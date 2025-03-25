@@ -109,14 +109,8 @@ class StyleSynth_DiffusionModel:
                           device=self.device)
 
         # get context vectors based on provided classes
-        clothing_type_labels = []
-        for clothing_type in clothing_types:
-            if clothing_type not in CLOTHING_TYPES:
-                raise Exception(
-                    f'Invalid clothing type: {clothing_type}. Expected one '
-                    + f'of: {CLOTHING_TYPES}')
-            clothing_type_label = CLOTHING_TYPES.index(clothing_type)
-            clothing_type_labels.append(clothing_type_label)
+        clothing_type_labels = list(map(
+            lambda c: CLOTHING_TYPES.index(c), clothing_types))
         c = torch.Tensor(clothing_type_labels)
         c = F.one_hot(
             c.to(torch.int64), num_classes=len(CLOTHING_TYPES))\
@@ -189,6 +183,23 @@ class StyleSynth_DiffusionModel:
         plt.tight_layout()
         plt.show()
 
+    def _get_init_unet(self):
+        # return initial U-Net, before training/loading weights
+        return StyleSynth_UNet(
+            img_size=self.img_size,
+            img_chs=IMG_CHS,
+            T=self.T,
+            down_chs=[125, 175, 225],
+            group_size=25,
+            t_embed_dim=10,
+            c_embed_dim=len(CLOTHING_TYPES),
+            conv_hidden_layers=6,
+            dense_embed_hidden_layers=6,
+            t_embed_hidden_layers=6,
+            c_embed_hidden_layers=6,
+            transp_conv_hidden_layers=6,
+            device=self.device)
+
     def train(self, epochs, batch_size, vis_interval):
         # load dataset and create data loader
         self.logger.info('Loading Fashion MNIST dataset...')
@@ -209,20 +220,7 @@ class StyleSynth_DiffusionModel:
         self.logger.info('Dataset loaded')
 
         # instantiate U-Net model for predicting noise added to an image
-        unet = StyleSynth_UNet(
-            img_size=self.img_size,
-            img_chs=IMG_CHS,
-            T=self.T,
-            down_chs=[125, 175, 225],
-            group_size=25,
-            t_embed_dim=10,
-            c_embed_dim=len(CLOTHING_TYPES),
-            conv_hidden_layers=6,
-            dense_embed_hidden_layers=6,
-            t_embed_hidden_layers=6,
-            c_embed_hidden_layers=6,
-            transp_conv_hidden_layers=6,
-            device=self.device)
+        unet = self._get_init_unet()
 
         # set up optimizer
         optimizer = Adam(unet.parameters(), lr=0.001)
@@ -283,3 +281,17 @@ class StyleSynth_DiffusionModel:
         unet.eval()
         self.unet = unet
         self.logger.info('Training complete')
+
+    def save(self, save_path):
+        model_dict = {
+            'img_size': self.img_size,
+            'T': self.T,
+            'w': self.w,
+            'upper_beta': self.upper_beta,
+            'unet': self.unet.state_dict()
+        }
+        torch.save(model_dict, save_path)
+
+    def load(self, model_dict):
+        self.unet = self._get_init_unet()
+        self.unet.load_state_dict(model_dict['unet'])
