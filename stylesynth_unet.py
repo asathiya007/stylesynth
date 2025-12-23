@@ -162,10 +162,12 @@ class StyleSynth_UNet(nn.Module):
         self.to_latent_vec = nn.Flatten().to(self.device)
 
         # dense embedding for latent vector
-        dense_embed_layers = [
-            nn.Linear(latent_vec_len, latent_vec_len),
-            nn.GELU()
-        ] * (dense_embed_hidden_layers + 2)
+        dense_embed_layers = []
+        for _ in range(dense_embed_hidden_layers + 2):
+            dense_embed_layers.extend([
+                nn.Linear(latent_vec_len, latent_vec_len),
+                nn.GELU()
+            ])
         self.dense_embed_latent_vec = nn.Sequential(*dense_embed_layers).to(
             self.device)
 

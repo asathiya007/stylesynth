@@ -267,14 +267,15 @@ class StyleSynth_DiffusionModel:
                 loss = F.mse_loss(eps_t, pred_eps_t)
                 avg_loss = loss.item()
                 loss.backward()
-                # above code (MSE across all elements) is mathematically
-                # equivalent to the below code (MSE across elements in each
-                # image, followed by MSE across image-wise MSEs)
-                # loss_per_elem = F.mse_loss(
+                # above code (MSE over all elements) is mathematically
+                # equivalent to the below code (MSE over elements of each
+                # item in the batch, followed by mean over the resulting
+                # batch-item-wise MSEs)
+                # loss = F.mse_loss(
                 #     eps_t, pred_eps_t, reduction='none')
-                # loss_per_img = loss.mean(dim=(1, 2, 3))
-                # avg_loss_per_img = loss_per_img.mean()
-                # avg_loss_per_img.backward()
+                # batch_item_loss = loss.mean(dim=(1, 2, 3))
+                # avg_loss = batch_item_loss.mean()
+                # avg_loss.backward()
                 optimizer.step()
                 del x_t, eps_t, pred_eps_t, loss  # deleting to save memory
 
