@@ -18,11 +18,13 @@ class ConvBlock(nn.Module):
             nn.GroupNorm(group_size, out_chs),
             nn.GELU()
         ]
-        hidden_layers = [
-            nn.Conv2d(out_chs, out_chs, 3, 1, 1),
-            nn.GroupNorm(group_size, out_chs),
-            nn.GELU()
-        ] * (num_hidden_layers)
+        hidden_layers = []
+        for _ in range(num_hidden_layers):
+            hidden_layers.extend([
+                nn.Conv2d(out_chs, out_chs, 3, 1, 1),
+                nn.GroupNorm(group_size, out_chs),
+                nn.GELU()
+            ])
         if pool:
             rearrange_layers = [
                 # cuts image into p1 groups of horizontal strips (adjacent
@@ -59,11 +61,13 @@ class TransposeConvBlock(nn.Module):
             nn.GroupNorm(group_size, out_chs),
             nn.GELU()
         ]
-        hidden_layers = [
-            nn.Conv2d(out_chs, out_chs, 3, 1, 1),
-            nn.GroupNorm(group_size, out_chs),
-            nn.GELU()
-        ] * (num_hidden_layers + 1)
+        hidden_layers = []
+        for _ in range(num_hidden_layers + 1):
+            hidden_layers.extend([
+                nn.Conv2d(out_chs, out_chs, 3, 1, 1),
+                nn.GroupNorm(group_size, out_chs),
+                nn.GELU()
+            ])
         self.layers = nn.Sequential(*(transp_conv_layer + hidden_layers))
 
     def forward(self, x_w_skip):
@@ -110,10 +114,12 @@ class EmbedBlock(nn.Module):
             nn.Linear(in_dim, embed_dim),
             nn.GELU()
         ]
-        hidden_layers = [
-            nn.Linear(embed_dim, embed_dim),
-            nn.GELU()
-        ] * num_hidden_layers
+        hidden_layers = []
+        for _ in range(num_hidden_layers):
+            hidden_layers.extend([
+                nn.Linear(embed_dim, embed_dim),
+                nn.GELU()
+            ])
         out_layer = [
             nn.Unflatten(1, (embed_dim, 1, 1))
         ]

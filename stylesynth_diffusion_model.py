@@ -184,8 +184,9 @@ class StyleSynth_DiffusionModel:
         plt.show()
 
     def _get_init_unet(self):
-        # return initial U-Net, before training/loading weights
-        return StyleSynth_UNet(
+        # instantiate initial U-Net, before training/loading weights
+        self.logger.info('Instantiating U-Net...')
+        unet = StyleSynth_UNet(
             img_size=self.img_size,
             img_chs=IMG_CHS,
             T=self.T,
@@ -199,6 +200,14 @@ class StyleSynth_DiffusionModel:
             c_embed_hidden_layers=6,
             transp_conv_hidden_layers=6,
             device=self.device)
+        self.logger.info('Instantiated U-Net')
+        
+        # print number of parameters
+        num_params = sum(p.numel() for p in unet.parameters())
+        self.logger.info(f'U-Net has {num_params / 1e6}M parameters')
+
+        # return U-Net
+        return unet
 
     def train(self, epochs, batch_size, vis_interval):
         # load dataset and create data loader
